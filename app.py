@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 from langchain_community.vectorstores import FAISS
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from langchain_core.prompts import ChatPromptTemplate
@@ -24,21 +24,28 @@ load_dotenv()
 
 # --- CORE RAG LOGIC ---
 
-def get_rag_chain(pdf_doc):
+def get_rag_chain(uploaded_files):
     """
-    Creates a Retrieval-Augmented Generation (RAG) chain from a PDF document.
+    Creates a Retrieval-Augmented Generation (RAG) chain from PDF, TXT, or DOCX documents.
 
     Args:
-        pdf_doc (list): A list of uploaded PDF file objects.
+        uploaded_files (list): A list of uploaded file paths.
 
     Returns:
         A LangChain retrieval chain object ready to be invoked.
     """
     # 1. Load Documents
-    # PyPDFLoader handles reading the text content from the PDF.
+    # Use appropriate loader based on file type
     docs = []
-    for pdf in pdf_doc:
-        loader = PyPDFLoader(pdf)
+    for file_path in uploaded_files:
+        if file_path.endswith('.pdf'):
+            loader = PyPDFLoader(file_path)
+        elif file_path.endswith('.txt'):
+            loader = TextLoader(file_path)
+        elif file_path.endswith('.docx'):
+            loader = Docx2txtLoader(file_path)
+        else:
+            continue
         docs.extend(loader.load())
 
     # 2. Split Documents into Chunks
@@ -87,11 +94,11 @@ def get_rag_chain(pdf_doc):
 # --- STREAMLIT UI ---
 
 # Set page configuration
-st.set_page_config(page_title="Chat with PDF 📄", layout="wide")
+st.set_page_config(page_title="Chat with Documents 📄", layout="wide")
 
 # Set the title of the app
-st.title("Chat with Your PDF 📄")
-st.write("Upload a PDF file and ask questions about its content.")
+st.title("Chat with Your Documents 📄")
+st.write("Upload a PDF, TXT, or DOCX file and ask questions about its content.")
 
 # Sidebar for API key and file upload
 with st.sidebar:
@@ -102,8 +109,8 @@ with st.sidebar:
         os.environ["OPENAI_API_KEY"] = api_key
         st.success("API Key set successfully! 🚀")
 
-    # PDF file uploader
-    uploaded_file = st.file_uploader("Upload your PDF", type="pdf")
+    # File uploader for PDF, TXT, and DOCX
+    uploaded_file = st.file_uploader("Upload your document", type=["pdf", "txt", "docx"])
 
     # Process button
     process_button = st.button("Process Document")
@@ -111,7 +118,7 @@ with st.sidebar:
 # Initialize session state for chat history and RAG chain
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "Hello! Please upload a PDF and process it to start chatting."}]
+        {"role": "assistant", "content": "Hello! Please upload a PDF, TXT, or DOCX file and process it to start chatting."}]
 
 if "rag_chain" not in st.session_state:
     st.session_state.rag_chain = None
@@ -121,7 +128,7 @@ if process_button:
     if not api_key:
         st.error("Please enter your OpenAI API Key in the sidebar.")
     elif not uploaded_file:
-        st.error("Please upload a PDF file.")
+        st.error("Please upload a PDF, TXT, or DOCX file.")
     else:
         with st.spinner("Processing your document... This may take a moment. ⏳"):
             # To handle the file object correctly, we need to save it temporarily
@@ -145,7 +152,7 @@ for message in st.session_state.messages:
         st.markdown(message["content"])
 
 # Handle user input
-if user_question := st.chat_input("Ask a question about the PDF:"):
+if user_question := st.chat_input("Ask a question about the document:"):
     if st.session_state.rag_chain is None:
         st.warning("Please upload and process a document first.")
     else:
